@@ -1,8 +1,11 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-WK 2026 — Wie gaat door?  (v3)
+WK 2026 — Wie gaat door?  (v6)
 ==============================
+v6: 'Stand van'-tijd in de header is nu NL-tijd (UTC+2), ook als het script in de
+cloud (GitHub Actions, UTC) draait. v5: layout-opschoning groepskaart. v4: Laatste 32
+ingevuld op basis van de huidige stand (officiele FIFA-kandidatenlijsten).
 v3: voegt wedstrijdtijden toe. Per groep een inklapbaar programma met kick-off-
 tijden + uitslagen, en een volledig knock-outschema (Laatste 32 t/m finale) met
 tijden. Alle tijden in NL-tijd (CEST = UTC+2, geldt heel het toernooi).
@@ -773,7 +776,9 @@ def _schrijf_fout(boodschap, nu):
 
 
 def main():
-    nu = datetime.datetime.now().strftime("%d-%m-%Y %H:%M")
+    # NL-tijd, ook als het script in de cloud (UTC) draait: UTC + 2 uur (CEST).
+    nu = (datetime.datetime.now(datetime.timezone.utc)
+          + datetime.timedelta(hours=NL_UTC_OFFSET)).strftime("%d-%m-%Y %H:%M")
     token = lees_token()
 
     if not token:

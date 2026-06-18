@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-WK 2026 — Wie gaat door?  (v7)
+WK 2026 — Wie gaat door?  (v8)
 ==============================
+v8: volledig bracket doorgetrokken t/m de finale (achtste/kwart/halve/finale) met
+match-nummers M89-M104 en feeder-labels ('Winnaar M74'); teams vullen zich vanzelf.
 v7: bovenaan een 'Vandaag'-blok met de wedstrijden van vandaag + live-stand voor
 wedstrijden die bezig zijn (LIVE/rust). v6: 'Stand van'-tijd in NL-tijd, ook bij
 cloud/UTC-run. v5: layout-opschoning groepskaart. v4: Laatste 32 ingevuld op basis
@@ -106,6 +108,34 @@ THIRD_SLOTS = [
     (82, ["A", "E", "H", "I", "J"]),
     (85, ["E", "F", "G", "I", "J"]),
     (87, ["D", "E", "I", "J", "L"]),
+]
+
+# Officieel bracket vanaf de achtste finale (match 89-104). Per wedstrijd het
+# nummer, de stage, de UTC-aftrap (sleutel naar de API-tijd) en de twee
+# 'feeders': de wedstrijd waarvan de winnaar (W) of, bij de troostfinale, de
+# verliezer (L) instroomt. UTC-tijden geverifieerd tegen de football-data-API.
+# Bron: officieel FIFA-schema / Wikipedia 2026 FIFA World Cup knockout stage.
+KO_BRACKET = [
+    # Achtste finale
+    {"nr": 89, "stage": "LAST_16", "utc": "2026-07-04T21:00:00Z", "thuis": ("W", 74), "uit": ("W", 77)},
+    {"nr": 90, "stage": "LAST_16", "utc": "2026-07-04T17:00:00Z", "thuis": ("W", 73), "uit": ("W", 75)},
+    {"nr": 91, "stage": "LAST_16", "utc": "2026-07-05T20:00:00Z", "thuis": ("W", 76), "uit": ("W", 78)},
+    {"nr": 92, "stage": "LAST_16", "utc": "2026-07-06T00:00:00Z", "thuis": ("W", 79), "uit": ("W", 80)},
+    {"nr": 93, "stage": "LAST_16", "utc": "2026-07-06T19:00:00Z", "thuis": ("W", 83), "uit": ("W", 84)},
+    {"nr": 94, "stage": "LAST_16", "utc": "2026-07-07T00:00:00Z", "thuis": ("W", 81), "uit": ("W", 82)},
+    {"nr": 95, "stage": "LAST_16", "utc": "2026-07-07T16:00:00Z", "thuis": ("W", 86), "uit": ("W", 88)},
+    {"nr": 96, "stage": "LAST_16", "utc": "2026-07-07T20:00:00Z", "thuis": ("W", 85), "uit": ("W", 87)},
+    # Kwartfinale
+    {"nr": 97, "stage": "QUARTER_FINALS", "utc": "2026-07-09T20:00:00Z", "thuis": ("W", 89), "uit": ("W", 90)},
+    {"nr": 98, "stage": "QUARTER_FINALS", "utc": "2026-07-10T19:00:00Z", "thuis": ("W", 93), "uit": ("W", 94)},
+    {"nr": 99, "stage": "QUARTER_FINALS", "utc": "2026-07-11T21:00:00Z", "thuis": ("W", 91), "uit": ("W", 92)},
+    {"nr": 100, "stage": "QUARTER_FINALS", "utc": "2026-07-12T01:00:00Z", "thuis": ("W", 95), "uit": ("W", 96)},
+    # Halve finale
+    {"nr": 101, "stage": "SEMI_FINALS", "utc": "2026-07-14T19:00:00Z", "thuis": ("W", 97), "uit": ("W", 98)},
+    {"nr": 102, "stage": "SEMI_FINALS", "utc": "2026-07-15T19:00:00Z", "thuis": ("W", 99), "uit": ("W", 100)},
+    # Troostfinale + finale
+    {"nr": 103, "stage": "THIRD_PLACE", "utc": "2026-07-18T21:00:00Z", "thuis": ("L", 101), "uit": ("L", 102)},
+    {"nr": 104, "stage": "FINAL", "utc": "2026-07-19T19:00:00Z", "thuis": ("W", 101), "uit": ("W", 102)},
 ]
 
 
@@ -389,6 +419,44 @@ def projecteer_last32(groepen, derde_plaatsen, api_last32):
     return duels, ambigu
 
 
+def _feeder_label(spec):
+    """('W', 74) -> 'Winnaar M74'  /  ('L', 101) -> 'Verliezer M101'."""
+    typ, nr = spec
+    woord = "Winnaar" if typ == "W" else "Verliezer"
+    return "%s M%d" % (woord, nr)
+
+
+def projecteer_knockout(knockout):
+    """Bouwt per ronde (achtste t/m finale) de duels uit KO_BRACKET, met
+    match-nummer + feeder-labels ('Winnaar M74'). Zodra de API echte teams
+    invult, worden die getoond i.p.v. de feeder-labels. Geeft een dict
+    stage -> [duel, ...] terug (zelfde vorm als de Laatste-32-projectie)."""
+    api_by_utc = {}
+    for lst in (knockout or {}).values():
+        for m in lst:
+            if m.get("utc"):
+                api_by_utc[m["utc"]] = m
+
+    per_stage = {}
+    for s in KO_BRACKET:
+        api = api_by_utc.get(s["utc"], {})
+        tijd = api.get("tijd") or nl_tijd(s["utc"])
+        api_thuis = api.get("thuis") or {}
+        api_uit = api.get("uit") or {}
+        if api_thuis.get("name") and api_uit.get("name"):
+            thuis_team, uit_team = api_thuis, api_uit
+            bron, score = "definitief", score_str(api)
+        else:
+            thuis_team, uit_team = {}, {}
+            bron, score = "ntb", ""
+        per_stage.setdefault(s["stage"], []).append({
+            "nr": s["nr"], "tijd": tijd, "bron": bron, "score": score,
+            "thuis_label": _feeder_label(s["thuis"]), "thuis_team": thuis_team,
+            "uit_label": _feeder_label(s["uit"]), "uit_team": uit_team,
+        })
+    return per_stage
+
+
 # ---------------------------------------------------------------------------
 # HTML genereren
 # ---------------------------------------------------------------------------
@@ -570,13 +638,38 @@ def proj_match_block(m):
     )
 
 
+def bracket_match_block(m):
+    """Render een bracket-duel (achtste t/m finale): match-nr + feeder-labels
+    ('Winnaar M74'), of de echte teams + uitslag zodra die bekend zijn."""
+    if m["bron"] == "definitief":
+        badge = '<span class="ko-badge def">definitief</span>'
+        mid = m["score"] if m["score"] else '<span class="vs">vs</span>'
+        thuis = team_label(m["thuis_team"])
+        uit = team_label(m["uit_team"])
+    else:
+        badge = '<span class="ko-badge">n.t.b.</span>'
+        mid = '<span class="vs">vs</span>'
+        thuis = '<span class="slot">%s</span>' % html.escape(m["thuis_label"])
+        uit = '<span class="slot">%s</span>' % html.escape(m["uit_label"])
+    return (
+        '<div class="ko-match">'
+        '<div class="ko-tijd">M%d &middot; %s %s</div>'
+        '<div class="ko-teams"><span>%s</span>'
+        '<span class="ko-mid">%s</span><span>%s</span></div>'
+        '</div>' % (m["nr"], html.escape(m["tijd"]), badge, thuis, mid, uit)
+    )
+
+
 def knockout_sectie(knockout, last32_proj, ambigu):
     if not knockout and not last32_proj:
         return ""
+    later = projecteer_knockout(knockout)
     kolommen = []
     for stage, titel in KO_RONDES:
         if stage == "LAST_32" and last32_proj:
             blokken = "".join(proj_match_block(m) for m in last32_proj)
+        elif stage in later:
+            blokken = "".join(bracket_match_block(m) for m in later[stage])
         else:
             ms = knockout.get(stage, [])
             if not ms:
@@ -593,8 +686,10 @@ def knockout_sectie(knockout, last32_proj, ambigu):
         '<h3>Knock-outschema &mdash; Laatste 32 op basis van de huidige stand</h3>'
         '<p class="toelichting">De Laatste 32 is ingevuld met de huidige (nog '
         'voorlopige) standen: nrs 1 &amp; 2 op vaste posities, de 8 beste nummers 3 '
-        'volgens de offici&euml;le FIFA-kandidatenlijsten. Latere rondes blijven '
-        '&ldquo;n.t.b.&rdquo; (afhankelijk van uitslagen). Alle tijden in NL-tijd.%s</p>'
+        'volgens de offici&euml;le FIFA-kandidatenlijsten. Vanaf de achtste finale '
+        'staat het volledige bracket met match-nummers en de doorstroming '
+        '(&ldquo;Winnaar M74&rdquo; enz.); de teams vullen zich vanzelf in zodra de '
+        'uitslagen bekend zijn. Alle tijden in NL-tijd.%s</p>'
         '<div class="ko-bracket">%s</div>'
         '</div>' % (extra, "".join(kolommen))
     )

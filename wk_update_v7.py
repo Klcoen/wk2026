@@ -419,7 +419,10 @@ def team_label(t):
 def score_str(info):
     s = info.get("score") or {}
     h, a = s.get("home"), s.get("away")
-    if info.get("status") == "FINISHED" and h is not None and a is not None:
+    # Toon de stand bij afgelopen EN lopende wedstrijden (football-data zet de
+    # actuele tussenstand tijdens het spelen ook in score.fullTime).
+    if (info.get("status") in ("FINISHED",) + LIVE_STATUS
+            and h is not None and a is not None):
         return "%d&ndash;%d" % (h, a)
     return ""
 

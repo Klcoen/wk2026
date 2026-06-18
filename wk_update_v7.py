@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-WK 2026 — Wie gaat door?  (v6)
+WK 2026 — Wie gaat door?  (v7)
 ==============================
-v6: 'Stand van'-tijd in de header is nu NL-tijd (UTC+2), ook als het script in de
-cloud (GitHub Actions, UTC) draait. v5: layout-opschoning groepskaart. v4: Laatste 32
-ingevuld op basis van de huidige stand (officiele FIFA-kandidatenlijsten).
+v7: bovenaan een 'Vandaag'-blok met de wedstrijden van vandaag + live-stand voor
+wedstrijden die bezig zijn (LIVE/rust). v6: 'Stand van'-tijd in NL-tijd, ook bij
+cloud/UTC-run. v5: layout-opschoning groepskaart. v4: Laatste 32 ingevuld op basis
+van de huidige stand (officiele FIFA-kandidatenlijsten).
 v3: voegt wedstrijdtijden toe. Per groep een inklapbaar programma met kick-off-
 tijden + uitslagen, en een volledig knock-outschema (Laatste 32 t/m finale) met
 tijden. Alle tijden in NL-tijd (CEST = UTC+2, geldt heel het toernooi).
@@ -159,6 +160,24 @@ def nl_tijd(utc_str):
     )
 
 
+def nl_datum(utc_str):
+    """UTC-string -> NL-datum als 'YYYY-MM-DD' (of None)."""
+    if not utc_str:
+        return None
+    try:
+        dt = datetime.datetime.strptime(utc_str, "%Y-%m-%dT%H:%M:%SZ")
+    except ValueError:
+        return None
+    dt += datetime.timedelta(hours=NL_UTC_OFFSET)
+    return dt.strftime("%Y-%m-%d")
+
+
+def nl_vandaag():
+    """Huidige NL-datum als 'YYYY-MM-DD' (werkt ook bij UTC-cloudrun)."""
+    nu = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(hours=NL_UTC_OFFSET)
+    return nu.strftime("%Y-%m-%d")
+
+
 # ---------------------------------------------------------------------------
 # Standen omzetten naar groepen
 # ---------------------------------------------------------------------------
@@ -210,28 +229,36 @@ def parse_groepen(data):
 def parse_wedstrijden(data):
     groep_w = {}    # letter -> [wedstrijd, ...]
     knockout = {}   # stage  -> [wedstrijd, ...]
+    alle = []       # platte lijst van alle wedstrijden (voor 'Vandaag')
+    ko_titels = dict(KO_RONDES)
     for m in data.get("matches", []):
         stage = m.get("stage")
         score = m.get("score") or {}
         info = {
             "utc": m.get("utcDate"),
             "tijd": nl_tijd(m.get("utcDate")),
+            "nl_datum": nl_datum(m.get("utcDate")),
             "status": m.get("status"),
             "thuis": m.get("homeTeam") or {},
             "uit": m.get("awayTeam") or {},
             "score": score.get("fullTime") or {},
+            "context": "",
         }
         if stage in ("GROUP_STAGE", "LEAGUE_STAGE"):
             groep_naam = m.get("group") or ""
             letter = groep_naam.replace("GROUP_", "").replace("Group ", "").strip()
+            info["context"] = "Groep " + letter if letter else ""
             groep_w.setdefault(letter, []).append(info)
         elif stage:
+            info["context"] = ko_titels.get(stage, "Knock-out")
             knockout.setdefault(stage, []).append(info)
+        alle.append(info)
     for v in groep_w.values():
         v.sort(key=lambda x: x["utc"] or "")
     for v in knockout.values():
         v.sort(key=lambda x: x["utc"] or "")
-    return groep_w, knockout
+    alle.sort(key=lambda x: x["utc"] or "")
+    return groep_w, knockout, alle
 
 
 # ---------------------------------------------------------------------------
@@ -570,8 +597,87 @@ def knockout_sectie(knockout, last32_proj, ambigu):
     )
 
 
+LIVE_STATUS = ("IN_PLAY", "LIVE", "PAUSED", "SUSPENDED")
+
+
+def _vandaag_status(info):
+    """Geeft (css-klasse, label, toon_score) voor een wedstrijd van vandaag."""
+    s = info.get("status")
+    if s in ("IN_PLAY", "LIVE"):
+        return "live", "LIVE", True
+    if s == "PAUSED":
+        return "live", "rust", True
+    if s == "SUSPENDED":
+        return "live", "onderbroken", True
+    if s == "FINISHED":
+        return "klaar", "afgelopen", True
+    if s in ("POSTPONED", "CANCELLED"):
+        return "muted", ("uitgesteld" if s == "POSTPONED" else "afgelast"), False
+    # nog te spelen: toon de aftraptijd zelf als label
+    tijd = info.get("tijd") or ""
+    klok = tijd.split(" ")[-1] if tijd else ""
+    return "tijd", klok, False
+
+
+def vandaag_match_regel(info):
+    klasse, label, toon_score = _vandaag_status(info)
+    if toon_score:
+        sc = score_str(info)
+        midden = sc if sc else '<span class="vs">&ndash;</span>'
+    else:
+        midden = '<span class="vs">vs</span>'
+    context = info.get("context") or ""
+    return (
+        '<div class="vd-match vd-%s">'
+        '<span class="vd-status vd-%s">%s</span>'
+        '<span class="vd-thuis">%s</span>'
+        '<span class="vd-score">%s</span>'
+        '<span class="vd-uit">%s</span>'
+        '<span class="vd-context">%s</span>'
+        '</div>' % (
+            klasse, klasse, html.escape(label),
+            team_label(info["thuis"]), midden, team_label(info["uit"]),
+            html.escape(context),
+        )
+    )
+
+
+def vandaag_sectie(alle_wedstrijden, vandaag):
+    if alle_wedstrijden is None:
+        return ""
+    matches = [m for m in alle_wedstrijden
+               if m.get("nl_datum") == vandaag or m.get("status") in LIVE_STATUS]
+    matches.sort(key=lambda x: x["utc"] or "")
+    live_n = sum(1 for m in matches if m.get("status") in LIVE_STATUS)
+
+    # Mooie datumkop, bv. "donderdag 18 juni"
+    try:
+        d = datetime.datetime.strptime(vandaag, "%Y-%m-%d")
+        dagen = ["maandag", "dinsdag", "woensdag", "donderdag", "vrijdag",
+                 "zaterdag", "zondag"]
+        maanden = ["januari", "februari", "maart", "april", "mei", "juni", "juli",
+                   "augustus", "september", "oktober", "november", "december"]
+        datumkop = "%s %d %s" % (dagen[d.weekday()], d.day, maanden[d.month - 1])
+    except ValueError:
+        datumkop = vandaag
+
+    live_badge = (' &middot; <span class="live-tel">%d live</span>' % live_n
+                  if live_n else "")
+    if matches:
+        inhoud = "".join(vandaag_match_regel(m) for m in matches)
+    else:
+        inhoud = ('<p class="vd-leeg">Vandaag geen WK-wedstrijden. '
+                  'Hieronder vind je de standen en het programma.</p>')
+    return (
+        '<div class="kaart kaart-breed vandaag">'
+        '<h3>Vandaag &mdash; %s%s</h3>'
+        '%s'
+        '</div>' % (html.escape(datumkop), live_badge, inhoud)
+    )
+
+
 def bouw_html(groepen, derde_plaatsen, groep_wedstrijden, knockout, tijd,
-              foutmelding=""):
+              alle_wedstrijden=None, vandaag=None, foutmelding=""):
     if foutmelding:
         body = '<div class="kaart kaart-breed melding">%s</div>' % foutmelding
     elif not groepen:
@@ -585,8 +691,9 @@ def bouw_html(groepen, derde_plaatsen, groep_wedstrijden, knockout, tijd,
         )
         last32_proj, ambigu = projecteer_last32(
             groepen, derde_plaatsen, (knockout or {}).get("LAST_32", []))
-        body = ('<div class="grid">%s</div>%s%s'
-                % (kaarten, beste3_panel(derde_plaatsen),
+        vandaag_html = vandaag_sectie(alle_wedstrijden, vandaag) if vandaag else ""
+        body = ('%s<div class="grid">%s</div>%s%s'
+                % (vandaag_html, kaarten, beste3_panel(derde_plaatsen),
                    knockout_sectie(knockout, last32_proj, ambigu)))
 
     aantal_door = sum(1 for rijen in groepen.values() for r in rijen
@@ -739,6 +846,41 @@ table.groep td, table.groep th {{ font-variant-numeric: tabular-nums; }}
 }}
 .ko-badge.def {{ background: var(--door-tint); color: var(--door); }}
 
+/* Vandaag-sectie (bovenaan) */
+.vandaag {{ margin-top: 0; border-color: var(--bp-gold); }}
+.vandaag h3 {{ display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }}
+.live-tel {{
+  color: #fff; background: #C0202A; border-radius: 20px;
+  font-family: 'DM Sans', sans-serif; font-size: .72rem; font-weight: 600;
+  padding: 2px 9px; letter-spacing: .02em;
+}}
+.vd-leeg {{ color: var(--bp-muted); font-size: .9rem; margin: 4px 0 0; }}
+.vd-match {{
+  display: grid; grid-template-columns: 72px 1fr auto 1fr 96px;
+  gap: 10px; align-items: center; padding: 9px 0;
+  border-bottom: 1px solid #F0EBE3; font-size: .92rem;
+}}
+.vd-match:last-child {{ border-bottom: none; }}
+.vd-match.vd-live {{ background: #FCEEEE; border-radius: 8px; padding: 9px 8px; }}
+.vd-status {{
+  font-size: .64rem; font-weight: 700; letter-spacing: .04em;
+  text-transform: uppercase; text-align: center; border-radius: 20px;
+  padding: 3px 0;
+}}
+.vd-status.vd-tijd {{ color: var(--bp-ink); background: #EFEAE1; font-variant-numeric: tabular-nums; }}
+.vd-status.vd-live {{ color: #fff; background: #C0202A; animation: knipper 1.6s ease-in-out infinite; }}
+.vd-status.vd-klaar {{ color: var(--door); background: var(--door-tint); }}
+.vd-status.vd-muted {{ color: var(--bp-muted); background: #EDE7DD; }}
+@keyframes knipper {{ 0%,100% {{ opacity: 1; }} 50% {{ opacity: .55; }} }}
+.vd-thuis {{ display: flex; align-items: center; gap: 7px; justify-content: flex-end; text-align: right; }}
+.vd-uit {{ display: flex; align-items: center; gap: 7px; }}
+.vd-score {{ font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; min-width: 34px; text-align: center; }}
+.vd-context {{ color: var(--bp-muted); font-size: .72rem; text-align: right; white-space: nowrap; }}
+@media (max-width: 560px) {{
+  .vd-match {{ grid-template-columns: 60px 1fr auto 1fr; }}
+  .vd-context {{ display: none; }}
+}}
+
 footer {{
   max-width: 1240px; margin: 30px auto 0; color: var(--bp-muted);
   font-size: .78rem; text-align: center;
@@ -809,29 +951,35 @@ def main():
         sys.exit(1)
 
     # Wedstrijden zijn een aanvulling: lukt dit niet, dan tonen we toch de stand.
-    groep_wedstrijden, knockout = {}, {}
+    groep_wedstrijden, knockout, alle_wedstrijden = {}, {}, []
     try:
         wedstrijden = haal_wedstrijden(token)
-        groep_wedstrijden, knockout = parse_wedstrijden(wedstrijden)
+        groep_wedstrijden, knockout, alle_wedstrijden = parse_wedstrijden(wedstrijden)
     except Exception as e:
         print("[!] Wedstrijden niet opgehaald (stand wordt wel getoond): %s" % e)
 
+    vandaag = nl_vandaag()
     groepen = parse_groepen(data)
     derde_plaatsen = bereken_doorgang(groepen)
 
     with open(DATA_JSON, "w", encoding="utf-8") as f:
-        json.dump({"tijd": nu, "groepen": groepen, "nummers_3": derde_plaatsen,
+        json.dump({"tijd": nu, "vandaag": vandaag, "groepen": groepen,
+                   "nummers_3": derde_plaatsen,
                    "groep_wedstrijden": groep_wedstrijden, "knockout": knockout},
                   f, ensure_ascii=False, indent=2)
 
     with open(OUTPUT_HTML, "w", encoding="utf-8") as f:
-        f.write(bouw_html(groepen, derde_plaatsen, groep_wedstrijden, knockout, nu))
+        f.write(bouw_html(groepen, derde_plaatsen, groep_wedstrijden, knockout, nu,
+                          alle_wedstrijden=alle_wedstrijden, vandaag=vandaag))
 
     aantal = sum(1 for rijen in groepen.values() for r in rijen
                  if r["status"] in ("door", "beste3"))
     ko_aantal = sum(len(v) for v in knockout.values())
-    print("[OK] %s  |  %d groepen  |  %d landen door  |  %d knock-outduels  ->  %s"
-          % (nu, len(groepen), aantal, ko_aantal, OUTPUT_HTML))
+    n_vandaag = sum(1 for m in alle_wedstrijden
+                    if m.get("nl_datum") == vandaag or m.get("status") in LIVE_STATUS)
+    print("[OK] %s  |  %d groepen  |  %d landen door  |  %d knock-outduels  |  "
+          "%d wedstrijden vandaag  ->  %s"
+          % (nu, len(groepen), aantal, ko_aantal, n_vandaag, OUTPUT_HTML))
 
 
 if __name__ == "__main__":

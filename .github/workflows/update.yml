@@ -2,8 +2,10 @@ name: WK2026 update
 
 on:
   schedule:
-    - cron: "*/5 * * * *"    # elke ~5 min (GitHub kan iets later draaien)
-  workflow_dispatch:          # handmatig starten via de Actions-tab
+    # Offset weg van :00 (GitHub knijpt crons rond het hele uur af). Best-effort
+    # backup; de betrouwbare trigger is de externe pinger -> workflow_dispatch.
+    - cron: "3-59/5 * * * *"
+  workflow_dispatch:          # door de externe pinger (cron-job.org) of handmatig
   push:
     branches: [main]          # ook bij elke wijziging aan de repo
 

@@ -8,7 +8,7 @@ waarvan de Laatste 32 op basis van de huidige stand wordt ingevuld.
 eerste workflow-run), bijv. `https://klcoen.github.io/wk2026/`.
 
 ## Hoe het werkt
-- `wk_update_v5.py` haalt standen + wedstrijden op bij football-data.org en
+- `wk_update_v7.py` haalt standen + wedstrijden op bij football-data.org en
   genereert `wk_dashboard.html` (alleen Python-standaardbibliotheek, geen pip).
 - Een GitHub Actions-workflow (`.github/workflows/update.yml`) draait elke ~10 min
   in de cloud, genereert het dashboard opnieuw en publiceert het via GitHub Pages.
@@ -18,4 +18,4 @@ eerste workflow-run), bijv. `https://klcoen.github.io/wk2026/`.
 
 ## Zelf draaien (lokaal)
 Zet je football-data.org-token in `wk_config.txt` of in de omgevingsvariabele
-`FOOTBALL_DATA_TOKEN` en draai `python wk_update_v5.py`.
+`FOOTBALL_DATA_TOKEN` en draai `python wk_update_v7.py`.

@@ -1,11 +1,13 @@
 # WK 2026 — Wie gaat door? (live dashboard)
 
-Live dashboard van het WK 2026: groepsstanden, wie doorgaat naar de laatste 32
-(nrs 1 & 2 + 8 beste nummers 3), wedstrijdtijden (NL-tijd) en een knock-outschema
-waarvan de Laatste 32 op basis van de huidige stand wordt ingevuld.
+Live dashboard van het WK 2026: een **Vandaag-blok** (wedstrijden van vandaag met
+uitslag/tussenstand/aftraptijd), groepsstanden, wie doorgaat naar de laatste 32
+(nrs 1 & 2 + 8 beste nummers 3), en een volledig **knock-outschema t/m de finale**.
+De Laatste 32 (M73–M88) wordt op basis van de huidige stand ingevuld; vanaf de
+achtste finale (M89–M104) staat het bracket met match-nummers, de doorstroming
+("Winnaar M74") en per feeder de **mogelijke landen**. Alle tijden in NL-tijd.
 
-**Live link:** zie de GitHub Pages-URL onder *Settings → Pages* (verschijnt na de
-eerste workflow-run), bijv. `https://klcoen.github.io/wk2026/`.
+**Live link:** https://klcoen.github.io/wk2026/
 
 ## Hoe het werkt
 - `wk_update_v8.py` haalt standen + wedstrijden op bij football-data.org en

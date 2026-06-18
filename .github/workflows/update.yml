@@ -2,10 +2,11 @@ name: WK2026 update
 
 on:
   schedule:
-    # Offset weg van :00 (GitHub knijpt crons rond het hele uur af). Best-effort
-    # backup; de betrouwbare trigger is de externe pinger -> workflow_dispatch.
-    - cron: "3-59/5 * * * *"
-  workflow_dispatch:          # door de externe pinger (cron-job.org) of handmatig
+    # 1x per uur (op :20, weg van het hele uur). Rustige crons honoreert GitHub
+    # betrouwbaar; hoogfrequente (*/5) werden hier afgeknepen. Een wedstrijd duurt
+    # ~2 uur, dus de stand staat binnen een uur na het eindsignaal bij.
+    - cron: "20 * * * *"
+  workflow_dispatch:          # handmatig starten via de Actions-tab
   push:
     branches: [main]          # ook bij elke wijziging aan de repo
 

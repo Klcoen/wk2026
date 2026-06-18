@@ -37,7 +37,7 @@ jobs:
         env:
           FOOTBALL_DATA_TOKEN: ${{ secrets.FOOTBALL_DATA_TOKEN }}
         run: |
-          python wk_update_v13.py
+          python wk_update_v14.py
           mkdir -p _site
           cp wk_dashboard.html _site/index.html
 

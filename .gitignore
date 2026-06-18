@@ -1,0 +1,7 @@
+# Nooit het API-token of lokale artefacten in de repo
+wk_config.txt
+wk_data.json
+wk_dashboard.html
+_site/
+__pycache__/
+*.pyc

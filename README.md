@@ -1,4 +1,4 @@
-# WK 2026 — De tussenstand (live dashboard)
+# De WK Speelschema 2026 — voor de echte voetballiefhebber (live dashboard)
 
 Live dashboard van het WK 2026, verdeeld over drie tabbladen:
 - **Wedstrijden** — de laatste 4 gespeelde en de 4 eerstvolgende wedstrijden, met
@@ -15,7 +15,7 @@ Alle tijden in NL-tijd en landnamen in het Nederlands.
 **Live link:** https://klcoen.github.io/wk2026/
 
 ## Hoe het werkt
-- `wk_update_v11.py` haalt standen + wedstrijden op bij football-data.org en
+- `wk_update_v12.py` haalt standen + wedstrijden op bij football-data.org en
   genereert `wk_dashboard.html` (alleen Python-standaardbibliotheek, geen pip).
 - Een GitHub Actions-workflow (`.github/workflows/update.yml`) genereert het dashboard
   opnieuw en publiceert het via GitHub Pages. GitHubs eigen `schedule`-cron vuurt voor
@@ -28,4 +28,4 @@ Alle tijden in NL-tijd en landnamen in het Nederlands.
 
 ## Zelf draaien (lokaal)
 Zet je football-data.org-token in `wk_config.txt` of in de omgevingsvariabele
-`FOOTBALL_DATA_TOKEN` en draai `python wk_update_v11.py`.
+`FOOTBALL_DATA_TOKEN` en draai `python wk_update_v12.py`.

@@ -15,17 +15,17 @@ Alle tijden in NL-tijd en landnamen in het Nederlands.
 **Live link:** https://klcoen.github.io/wk2026/
 
 ## Hoe het werkt
-- `wk_update_v14.py` haalt standen + wedstrijden op bij football-data.org en
+- `wk_update_v15.py` haalt standen + wedstrijden op bij football-data.org en
   genereert `wk_dashboard.html` (alleen Python-standaardbibliotheek, geen pip).
 - Een GitHub Actions-workflow (`.github/workflows/update.yml`) genereert het dashboard
   opnieuw en publiceert het via GitHub Pages. GitHubs eigen `schedule`-cron vuurt voor
   deze repo niet, dus het verversen gebeurt via een **externe cron-job** (cron-job.org)
-  die de workflow elke 15 min aanroept — zie **`PINGER_SETUP.md`**. (Geen live-bijhouden;
-  bewust simpel gehouden.)
+  die de workflow elke ~2 min aanroept — zie **`PINGER_SETUP.md`**.
 - Het API-token zit **niet** in de repo, maar als versleuteld repo-secret
   `FOOTBALL_DATA_TOKEN` (Settings → Secrets and variables → Actions).
-- De pagina ververst zichzelf elke 15 minuten in de browser.
+- De pagina ververst zichzelf elke 90 seconden in de browser, zodat de stand
+  bijna live meeloopt.
 
 ## Zelf draaien (lokaal)
 Zet je football-data.org-token in `wk_config.txt` of in de omgevingsvariabele
-`FOOTBALL_DATA_TOKEN` en draai `python wk_update_v14.py`.
+`FOOTBALL_DATA_TOKEN` en draai `python wk_update_v15.py`.

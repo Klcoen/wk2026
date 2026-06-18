@@ -426,16 +426,39 @@ def _feeder_label(spec):
     return "%s M%d" % (woord, nr)
 
 
-def projecteer_knockout(knockout):
+# KO_BRACKET op match-nummer, voor het terugrekenen van mogelijke landen.
+_BRACKET_BY_NR = {s["nr"]: s for s in KO_BRACKET}
+
+
+def _mogelijke_landen(nr, r32_by_nr):
+    """Loopt de bracket terug naar de Laatste-32-deelnemers en geeft de lijst
+    landen die wedstrijd `nr` (en dus de winnaar ervan) zou kunnen opleveren.
+    M74 -> de 2 deelnemers van M74; M89 -> de 4 uit M74+M77; enz."""
+    if nr in r32_by_nr:
+        d = r32_by_nr[nr]
+        return [t["name"] for t in (d["thuis_team"], d["uit_team"]) if t.get("name")]
+    s = _BRACKET_BY_NR.get(nr)
+    if not s:
+        return []
+    namen = []
+    for spec in (s["thuis"], s["uit"]):
+        for nm in _mogelijke_landen(spec[1], r32_by_nr):
+            if nm not in namen:
+                namen.append(nm)
+    return namen
+
+
+def projecteer_knockout(knockout, last32_proj):
     """Bouwt per ronde (achtste t/m finale) de duels uit KO_BRACKET, met
-    match-nummer + feeder-labels ('Winnaar M74'). Zodra de API echte teams
-    invult, worden die getoond i.p.v. de feeder-labels. Geeft een dict
-    stage -> [duel, ...] terug (zelfde vorm als de Laatste-32-projectie)."""
+    match-nummer + feeder-labels ('Winnaar M74') en de mogelijke landen per
+    feeder (teruggerekend naar de Laatste 32). Zodra de API echte teams invult,
+    worden die getoond. Geeft dict stage -> [duel, ...] terug."""
     api_by_utc = {}
     for lst in (knockout or {}).values():
         for m in lst:
             if m.get("utc"):
                 api_by_utc[m["utc"]] = m
+    r32_by_nr = {d["nr"]: d for d in (last32_proj or [])}
 
     per_stage = {}
     for s in KO_BRACKET:
@@ -453,6 +476,8 @@ def projecteer_knockout(knockout):
             "nr": s["nr"], "tijd": tijd, "bron": bron, "score": score,
             "thuis_label": _feeder_label(s["thuis"]), "thuis_team": thuis_team,
             "uit_label": _feeder_label(s["uit"]), "uit_team": uit_team,
+            "thuis_mogelijk": _mogelijke_landen(s["thuis"][1], r32_by_nr),
+            "uit_mogelijk": _mogelijke_landen(s["uit"][1], r32_by_nr),
         })
     return per_stage
 
@@ -638,9 +663,28 @@ def proj_match_block(m):
     )
 
 
+def _mogelijk_html(namen, rechts=False):
+    """Compacte lijst mogelijke landen onder een feeder-label (max 8 + rest)."""
+    if not namen:
+        return ""
+    MAX = 8
+    toon = namen[:MAX]
+    tekst = " / ".join(html.escape(n) for n in toon)
+    if len(namen) > MAX:
+        tekst += " +%d" % (len(namen) - MAX)
+    return '<span class="mogelijk">%s</span>' % tekst
+
+
+def _feeder_zijde(label, namen, rechts=False):
+    return ('<span class="feeder">'
+            '<span class="slot">%s</span>%s</span>'
+            % (html.escape(label), _mogelijk_html(namen, rechts)))
+
+
 def bracket_match_block(m):
     """Render een bracket-duel (achtste t/m finale): match-nr + feeder-labels
-    ('Winnaar M74'), of de echte teams + uitslag zodra die bekend zijn."""
+    ('Winnaar M74') met de mogelijke landen eronder, of de echte teams +
+    uitslag zodra die bekend zijn."""
     if m["bron"] == "definitief":
         badge = '<span class="ko-badge def">definitief</span>'
         mid = m["score"] if m["score"] else '<span class="vs">vs</span>'
@@ -649,8 +693,8 @@ def bracket_match_block(m):
     else:
         badge = '<span class="ko-badge">n.t.b.</span>'
         mid = '<span class="vs">vs</span>'
-        thuis = '<span class="slot">%s</span>' % html.escape(m["thuis_label"])
-        uit = '<span class="slot">%s</span>' % html.escape(m["uit_label"])
+        thuis = _feeder_zijde(m["thuis_label"], m.get("thuis_mogelijk"))
+        uit = _feeder_zijde(m["uit_label"], m.get("uit_mogelijk"), rechts=True)
     return (
         '<div class="ko-match">'
         '<div class="ko-tijd">M%d &middot; %s %s</div>'
@@ -663,7 +707,7 @@ def bracket_match_block(m):
 def knockout_sectie(knockout, last32_proj, ambigu):
     if not knockout and not last32_proj:
         return ""
-    later = projecteer_knockout(knockout)
+    later = projecteer_knockout(knockout, last32_proj)
     kolommen = []
     for stage, titel in KO_RONDES:
         if stage == "LAST_32" and last32_proj:
@@ -936,6 +980,12 @@ table.groep td, table.groep th {{ font-variant-numeric: tabular-nums; }}
   display: inline-block; min-width: 20px; font-size: .62rem; font-weight: 600;
   color: #fff; background: var(--bp-muted); border-radius: 4px;
   padding: 1px 4px; margin: 0 4px;
+}}
+.feeder {{ display: flex; flex-direction: column; gap: 2px; }}
+.ko-teams > span:last-child .feeder {{ align-items: flex-end; }}
+.mogelijk {{
+  font-size: .64rem; line-height: 1.25; color: var(--bp-muted);
+  margin: 0 4px; font-style: italic;
 }}
 .ko-badge {{
   float: right; font-size: .58rem; font-weight: 600; letter-spacing: .03em;

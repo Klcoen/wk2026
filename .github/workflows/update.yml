@@ -1,4 +1,5 @@
 name: WK2026 update
+# diagnose 19-jun: test of een verse commit-sha de Pages-publicatie weer losmaakt
 
 on:
   schedule:

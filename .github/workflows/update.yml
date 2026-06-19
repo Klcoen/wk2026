@@ -1,32 +1,29 @@
 name: WK2026 update
-# diagnose 19-jun: test of een verse commit-sha de Pages-publicatie weer losmaakt
+
+# Publiceert het dashboard naar de gh-pages-branch als een VERSE commit per run.
+# Reden: in de "workflow"-Pages-modus publiceert GitHub alleen opnieuw bij een
+# nieuwe commit-sha. De cron triggert steeds dezelfde sha, waardoor het verse
+# bestand niet live kwam (site bevroor). Door elke run een nieuwe (orphan)
+# commit naar gh-pages te force-pushen, is er altijd een nieuwe versie en
+# publiceert Pages netjes. Bij 10-min cron = 6 builds/uur, ruim onder de limiet.
 
 on:
   schedule:
-    # 1x per uur (op :20, weg van het hele uur). Rustige crons honoreert GitHub
-    # betrouwbaar; hoogfrequente (*/5) werden hier afgeknepen. Een wedstrijd duurt
-    # ~2 uur, dus de stand staat binnen een uur na het eindsignaal bij.
-    - cron: "20 * * * *"
-  workflow_dispatch:          # handmatig starten via de Actions-tab
+    - cron: "20 * * * *"      # uur-backup (GitHub-cron is voor deze repo onbetrouwbaar)
+  workflow_dispatch:          # door cron-job.org elke ~10 min aangeroepen
   push:
-    branches: [main]          # ook bij elke wijziging aan de repo
+    branches: [main]          # ook bij elke codewijziging
 
 permissions:
-  contents: read
-  pages: write
-  id-token: write
+  contents: write             # nodig om naar gh-pages te pushen
 
-# Voorkom dat twee runs tegelijk publiceren
 concurrency:
-  group: pages
+  group: wk-publish
   cancel-in-progress: true
 
 jobs:
-  build-deploy:
+  build-publish:
     runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deploy.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
 
@@ -37,14 +34,20 @@ jobs:
       - name: Dashboard genereren
         env:
           FOOTBALL_DATA_TOKEN: ${{ secrets.FOOTBALL_DATA_TOKEN }}
+        run: python wk_update_v15.py
+
+      - name: Publiceren naar gh-pages (verse commit per run)
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          python wk_update_v15.py
-          mkdir -p _site
-          cp wk_dashboard.html _site/index.html
-
-      - uses: actions/upload-pages-artifact@v3
-        with:
-          path: _site
-
-      - id: deploy
-        uses: actions/deploy-pages@v4
+          set -e
+          mkdir -p out
+          cp wk_dashboard.html out/index.html
+          touch out/.nojekyll            # Jekyll overslaan: serveer de HTML 1-op-1
+          cd out
+          git init -q
+          git config user.email "actions@github.com"
+          git config user.name "wk2026-bot"
+          git add .
+          git commit -q -m "publiceer $(date -u +%FT%TZ)"
+          git push -f "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" HEAD:gh-pages

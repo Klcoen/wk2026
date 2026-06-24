@@ -578,29 +578,41 @@ def _feeder_label(spec):
 _BRACKET_BY_NR = {s["nr"]: s for s in KO_BRACKET}
 
 
-def _mogelijke_landen(nr, r32_by_nr):
+def _mogelijke_landen(nr, r32_by_nr, oranje_nrs=None, doelland="Nederland"):
     """Loopt de bracket terug naar de Laatste-32-deelnemers en geeft de lijst
     landen die wedstrijd `nr` (en dus de winnaar ervan) zou kunnen opleveren.
-    M74 -> de 2 deelnemers van M74; M89 -> de 4 uit M74+M77; enz."""
+    M74 -> de 2 deelnemers van M74; M89 -> de 4 uit M74+M77; enz.
+
+    Ligt `nr` op de oranje route van het doelland (oranje_nrs), dan kan dat land
+    hier ook terechtkomen — ook al plaatst de huidige projectie het (nog) op de
+    andere tak. We zetten het dan vooraan in de lijst, zodat oranje-markering en
+    mogelijke-landen-lijst consistent zijn."""
     if nr in r32_by_nr:
         d = r32_by_nr[nr]
-        return [t["name"] for t in (d["thuis_team"], d["uit_team"]) if t.get("name")]
-    s = _BRACKET_BY_NR.get(nr)
-    if not s:
-        return []
-    namen = []
-    for spec in (s["thuis"], s["uit"]):
-        for nm in _mogelijke_landen(spec[1], r32_by_nr):
-            if nm not in namen:
-                namen.append(nm)
+        namen = [t["name"] for t in (d["thuis_team"], d["uit_team"]) if t.get("name")]
+    else:
+        s = _BRACKET_BY_NR.get(nr)
+        if not s:
+            return []
+        namen = []
+        for spec in (s["thuis"], s["uit"]):
+            for nm in _mogelijke_landen(spec[1], r32_by_nr, oranje_nrs, doelland):
+                if nm not in namen:
+                    namen.append(nm)
+    if oranje_nrs and nr in oranje_nrs and doelland not in namen:
+        namen.insert(0, doelland)
     return namen
 
 
-def projecteer_knockout(knockout, last32_proj):
+def projecteer_knockout(knockout, last32_proj, oranje_nrs=None):
     """Bouwt per ronde (achtste t/m finale) de duels uit KO_BRACKET, met
     match-nummer + feeder-labels ('Winnaar M74') en de mogelijke landen per
     feeder (teruggerekend naar de Laatste 32). Zodra de API echte teams invult,
-    worden die getoond. Geeft dict stage -> [duel, ...] terug."""
+    worden die getoond. Geeft dict stage -> [duel, ...] terug.
+
+    `oranje_nrs` (de oranje route van Nederland) wordt doorgegeven aan
+    _mogelijke_landen, zodat Nederland in de lijstjes van die wedstrijden vooraan
+    verschijnt — ook op de tak waar de projectie het (nog) niet plaatst."""
     api_by_utc = {}
     for lst in (knockout or {}).values():
         for m in lst:
@@ -624,8 +636,8 @@ def projecteer_knockout(knockout, last32_proj):
             "nr": s["nr"], "tijd": tijd, "bron": bron, "score": score,
             "thuis_label": _feeder_label(s["thuis"]), "thuis_team": thuis_team,
             "uit_label": _feeder_label(s["uit"]), "uit_team": uit_team,
-            "thuis_mogelijk": _mogelijke_landen(s["thuis"][1], r32_by_nr),
-            "uit_mogelijk": _mogelijke_landen(s["uit"][1], r32_by_nr),
+            "thuis_mogelijk": _mogelijke_landen(s["thuis"][1], r32_by_nr, oranje_nrs),
+            "uit_mogelijk": _mogelijke_landen(s["uit"][1], r32_by_nr, oranje_nrs),
         })
     return per_stage
 
@@ -929,7 +941,7 @@ def knockout_sectie(knockout, last32_proj, ambigu, oranje_nrs=None):
     if not knockout and not last32_proj:
         return ""
     oranje_nrs = oranje_nrs or set()
-    later = projecteer_knockout(knockout, last32_proj)
+    later = projecteer_knockout(knockout, last32_proj, oranje_nrs)
     kolommen = []
     for stage, titel in KO_RONDES:
         if stage == "LAST_32" and last32_proj:

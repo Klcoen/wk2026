@@ -817,6 +817,9 @@ def _mogelijk_html(namen, rechts=False):
     """Compacte lijst mogelijke landen onder een feeder-label (max 8 + rest)."""
     if not namen:
         return ""
+    # Nederland altijd vooraan in het lijstje (en dus nooit weggevallen bij de
+    # afkap op MAX); de rest behoudt zijn volgorde.
+    namen = sorted(namen, key=lambda n: n != "Nederland")
     MAX = 8
     toon = namen[:MAX]
     tekst = " / ".join(html.escape(n) for n in toon)
@@ -877,9 +880,10 @@ def oranje_routes(groepen, last32_proj=None, doelland="Nederland"):
     nog terecht zou kunnen komen, en beweegt mee met de gespeelde wedstrijden:
 
       - Land niet gevonden of in de groep uitgeschakeld  -> lege set.
-      - Groepsfase nog bezig                              -> alle mogelijke
-        instappunten (als nr. 1, nr. 2 of beste nummer 3 van de groep) + wat
-        daar stroomafwaarts uit volgt.
+      - Groepsfase nog bezig                              -> de instappunten
+        als nr. 1 of nr. 2 van de groep (Nederland eindigt sowieso 1e of 2e,
+        dus de beste-nummer-3-routes laten we bewust weg) + wat daar
+        stroomafwaarts uit volgt.
       - Groepsfase beslist                                -> alleen het echte
         instappunt uit de (definitieve of geprojecteerde) Laatste 32 + downstream.
     """
@@ -909,13 +913,13 @@ def oranje_routes(groepen, last32_proj=None, doelland="Nederland"):
         if not entry:
             return set()
     else:
-        # Groep nog bezig: alle instappunten die nog mogelijk zijn.
+        # Groep nog bezig: alleen de instappunten als nr. 1 of nr. 2 van de
+        # groep. Nederland eindigt sowieso 1e of 2e, dus de beste-nummer-3-
+        # instappunten (third-slots) laten we bewust weg.
         entry = set()
         for s in R32_SCHEMA:
             for slot in (s["thuis"], s["uit"]):
                 if slot[0] in ("winner", "runner") and slot[1] == groep_letter:
-                    entry.add(s["nr"])
-                elif slot[0] == "third" and groep_letter in slot[1]:
                     entry.add(s["nr"])
 
     return _forward_close(entry)
@@ -947,7 +951,8 @@ def knockout_sectie(knockout, last32_proj, ambigu, oranje_nrs=None):
              'mogelijk; hier is er &eacute;&eacute;n getoond.' if ambigu else '')
     oranje_tekst = (' <span class="oranje-mark">In oranje</span> staan alle '
                     'wedstrijden waar <strong>Nederland</strong> terecht zou kunnen '
-                    'komen &mdash; via groepswinst, als nummer 2 of als beste nummer 3.'
+                    'komen &mdash; via groepswinst of als nummer 2 (Nederland '
+                    'eindigt sowieso 1e of 2e in de groep).'
                     if oranje_nrs else '')
     return (
         '<div class="kaart kaart-breed">'
